@@ -119,6 +119,21 @@ public class SuggestionService {
         return found.stream().map(SuggestionView::from).toList();
     }
 
+    /**
+     * An agent just went offline: every open suggestion that would hand an order TO them is now stale.
+     * Close those (REJECTED, which also frees the open-suggestion key so a fresh one can be created) and
+     * return the affected order ids so the caller can re-plan them.
+     */
+    @Transactional
+    public List<String> voidOpenSuggestionsRecommending(String agentId) {
+        List<String> orderIds = new java.util.ArrayList<>();
+        for (ReassignmentSuggestion s : suggestions.findByStatusAndRecommendedAgent_Id(SuggestionStatus.PENDING, agentId)) {
+            s.reject();
+            orderIds.add(s.getOrder().getId());
+        }
+        return orderIds;
+    }
+
     /** The human checkpoint: only here does an order actually change hands. */
     @Transactional
     public SuggestionView resolve(Long id, SuggestionStatus target) {

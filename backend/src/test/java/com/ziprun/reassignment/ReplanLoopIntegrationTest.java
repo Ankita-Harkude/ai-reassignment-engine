@@ -223,6 +223,29 @@ class ReplanLoopIntegrationTest {
     }
 
     @Test
+    void whenARecommendedAgentGoesOfflineTheStaleSuggestionsAreVoidedAndReplanned() throws Exception {
+        patch("/agents/AGT-001/status", "{\"status\":\"OFFLINE\"}");
+        await().atMost(Duration.ofSeconds(10)).until(() -> pendingOfflineSuggestions().size() == 3);
+        String target = pendingOfflineSuggestions().get(0).get("recommendedAgentId").asText();
+
+        patch("/agents/" + target + "/status", "{\"status\":\"OFFLINE\"}");   // the person we suggested drops out
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> {
+            JsonNode pending = get("/suggestions?status=PENDING");
+            if (pending.size() != 3) return false;                            // every order still has one open suggestion
+            for (JsonNode s : pending) if (s.get("recommendedAgentId").asText().equals(target)) return false;
+            return true;
+        });
+        // nobody is pointed at either offline agent any more
+        for (JsonNode s : get("/suggestions?status=PENDING")) {
+            assertThat(s.get("recommendedAgentId").asText()).isNotIn("AGT-001", target);
+            assertThat(s.get("triggerReason").asText()).isEqualTo("AGENT_OFFLINE");
+        }
+        // and the voided ones are recorded as REJECTED, not deleted
+        assertThat(get("/suggestions?status=REJECTED").size()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
     void offlineAgentWithNoActiveOrdersQueuesNothing() throws Exception {
         patch("/agents/AGT-002/status", "{\"status\":\"OFFLINE\"}");   // AGT-002 holds no orders
         Thread.sleep(1500);

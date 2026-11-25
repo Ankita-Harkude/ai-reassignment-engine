@@ -49,8 +49,13 @@ public class ReplanService {
             log.warn("Re-plan skipped: agent {} no longer exists", agentId);
             return;
         }
-        List<String> stranded = orders.findByAssignedAgent_IdAndStatusInOrderByIdAsc(agentId, REPLANNABLE)
-                .stream().map(Order::getId).toList();
+        // Affected orders = the ones this agent holds, plus the ones someone was about to hand to this agent
+        // (their open suggestion is now stale, so it is voided and the order is planned again).
+        java.util.Set<String> affected = new java.util.LinkedHashSet<>(
+                orders.findByAssignedAgent_IdAndStatusInOrderByIdAsc(agentId, REPLANNABLE)
+                        .stream().map(Order::getId).toList());
+        affected.addAll(suggestions.voidOpenSuggestionsRecommending(agentId));
+        List<String> stranded = List.copyOf(affected);
         if (stranded.isEmpty()) {
             log.info("Agent {} went offline with no active orders - nothing to re-plan", agentId);
             return;

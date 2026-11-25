@@ -27,6 +27,9 @@ public interface SuggestionRepository extends JpaRepository<ReassignmentSuggesti
     @EntityGraph(attributePaths = {"order", "order.assignedAgent", "recommendedAgent"})
     List<ReassignmentSuggestion> findByOrder_IdAndStatus(String orderId, SuggestionStatus status);
 
+    @EntityGraph(attributePaths = {"order", "order.assignedAgent", "recommendedAgent"})
+    List<ReassignmentSuggestion> findByStatusAndRecommendedAgent_Id(SuggestionStatus status, String agentId);
+
     /** [agentId, count] of PENDING suggestions per recommended agent - the "already queued" load. */
     @Query("select s.recommendedAgent.id, count(s) from ReassignmentSuggestion s "
             + "where s.status = com.ziprun.reassignment.domain.SuggestionStatus.PENDING "

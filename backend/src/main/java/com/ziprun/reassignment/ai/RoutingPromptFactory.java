@@ -58,8 +58,8 @@ public class RoutingPromptFactory {
                 You are the dispatch assistant for ZipRun, a city delivery fleet.
 
                 SITUATION REPORT: AGENT OFFLINE - RECOVERY RE-PLAN
-                Agent %s (%s) has just gone OFFLINE and cannot complete any delivery. %d order(s) assigned to
-                them are now stranded: %s. Every previous assignment to %s is VOID and %s must not be chosen.
+                Agent %s (%s) has just gone OFFLINE and cannot complete any delivery. %d order(s) that were assigned
+                to them (or about to be handed to them) are now stranded: %s. Every previous assignment to %s is VOID and %s must not be chosen.
                 This is time-sensitive recovery work, not routine optimisation.
 
                 You are re-planning ONE stranded order now. The other stranded orders are being re-planned
