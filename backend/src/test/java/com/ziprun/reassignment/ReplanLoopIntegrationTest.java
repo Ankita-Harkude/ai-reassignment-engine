@@ -170,6 +170,59 @@ class ReplanLoopIntegrationTest {
     }
 
     @Test
+    void ordersStrandedWithNobodyToTakeThemAreStillSurfacedAsPendingNotLeftInvisible() throws Exception {
+        for (String id : List.of("AGT-002", "AGT-003", "AGT-004", "AGT-005")) {
+            patch("/agents/" + id + "/status", "{\"status\":\"OFFLINE\"}");
+        }
+        Thread.sleep(2000);                                          // let those re-plans finish
+        patch("/agents/AGT-001/status", "{\"status\":\"OFFLINE\"}");   // last agent standing: nobody is left
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> {
+            List<String> pending = new ArrayList<>();
+            for (JsonNode o : get("/orders?status=REASSIGNMENT_PENDING")) pending.add(o.get("id").asText());
+            return pending.containsAll(List.of("ORD-001", "ORD-002", "ORD-008"));
+        });
+        // ...with no suggestion for them (there is no one to suggest), so the UI lists them for ops.
+        for (JsonNode s : get("/suggestions?status=PENDING")) {
+            assertThat(s.get("orderId").asText()).isNotIn("ORD-001", "ORD-002", "ORD-008");
+        }
+        // and asking for a suggestion explains why it is impossible right now
+        mvc.perform(post("/orders/ORD-001/suggest"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("NO_ELIGIBLE_AGENT"));
+    }
+
+    @Autowired com.ziprun.reassignment.service.SuggestionService suggestionService;
+
+    @Test
+    void concurrentSuggestRequestsForTheSameOrderCreateExactlyOneSuggestion() throws Exception {
+        int threads = 8;
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        var startGun = new java.util.concurrent.CountDownLatch(1);
+        List<java.util.concurrent.Future<com.ziprun.reassignment.service.SuggestionService.Outcome>> results = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            results.add(pool.submit(() -> {
+                startGun.await();
+                return suggestionService.suggest("ORD-004", com.ziprun.reassignment.routing.RoutingContext.initial());
+            }));
+        }
+        startGun.countDown();
+
+        java.util.Set<Long> ids = new java.util.HashSet<>();
+        long created = 0;
+        for (var f : results) {
+            var outcome = f.get(20, java.util.concurrent.TimeUnit.SECONDS);   // none may throw
+            ids.add(outcome.suggestion().id());
+            if (outcome.created()) created++;
+        }
+        pool.shutdown();
+
+        assertThat(ids).hasSize(1);
+        assertThat(created).isEqualTo(1);
+        assertThat(get("/suggestions?status=PENDING")).hasSize(1);
+    }
+
+    @Test
     void offlineAgentWithNoActiveOrdersQueuesNothing() throws Exception {
         patch("/agents/AGT-002/status", "{\"status\":\"OFFLINE\"}");   // AGT-002 holds no orders
         Thread.sleep(1500);

@@ -33,11 +33,14 @@ public class ReplanService {
     private final OrderRepository orders;
     private final AgentRepository agents;
     private final SuggestionService suggestions;
+    private final OrderService orderService;
 
-    public ReplanService(OrderRepository orders, AgentRepository agents, SuggestionService suggestions) {
+    public ReplanService(OrderRepository orders, AgentRepository agents, SuggestionService suggestions,
+                         OrderService orderService) {
         this.orders = orders;
         this.agents = agents;
         this.suggestions = suggestions;
+        this.orderService = orderService;
     }
 
     public void replanForOfflineAgent(String agentId) {
@@ -64,6 +67,10 @@ public class ReplanService {
             } catch (NoEligibleAgentException e) {
                 failed++;
                 log.warn("Order {} cannot be re-planned: {}", orderId, e.getMessage());
+                // Never leave it invisible: the order is affected even though nobody can take it right now.
+                // It shows up in ops' "pending with no open suggestion" list, and a suggestion can be
+                // requested again once an agent is available.
+                flagAsPending(orderId);
             } catch (RuntimeException e) {
                 // Isolate failures per order: one bad order must not strand the others.
                 failed++;
@@ -72,5 +79,13 @@ public class ReplanService {
         }
         log.info("Re-plan ({}) finished: {} created, {} already pending, {} failed",
                 context.trigger(), created, existing, failed);
+    }
+
+    private void flagAsPending(String orderId) {
+        try {
+            orderService.markReassignmentPending(orderId);
+        } catch (RuntimeException e) {
+            log.error("Could not flag order {} as awaiting reassignment", orderId, e);
+        }
     }
 }

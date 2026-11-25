@@ -45,6 +45,12 @@ public class OrderService {
         return found.stream().map(OrderView::from).toList();
     }
 
+    /** Flags an affected order as awaiting reassignment (idempotent). Used when no agent can take it yet. */
+    @Transactional
+    public void markReassignmentPending(String orderId) {
+        orders.findById(orderId).ifPresent(Order::markReassignmentPending);
+    }
+
     private String nextId() {
         long n = orders.count() + 1;
         String id;

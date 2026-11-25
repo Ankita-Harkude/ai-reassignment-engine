@@ -9,6 +9,7 @@ import com.ziprun.reassignment.repository.OrderRepository;
 import com.ziprun.reassignment.repository.SuggestionRepository;
 import com.ziprun.reassignment.routing.*;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,8 +69,9 @@ public class SuggestionService {
         try {
             SuggestionView saved = writeTx.execute(tx -> persist(orderId, best, context));
             return new Outcome(saved, true);
-        } catch (DataIntegrityViolationException raced) {
-            // Another thread created the same open suggestion between our check and our insert.
+        } catch (DataIntegrityViolationException | ObjectOptimisticLockingFailureException raced) {
+            // Another thread created the same open suggestion between our check and our insert: either the
+            // unique key rejected our row, or it had already moved the order (version conflict).
             SuggestionView existing = readTx.execute(tx -> suggestions
                     .findByActiveKey(ReassignmentSuggestion.keyFor(context.trigger(), orderId))
                     .map(SuggestionView::from).orElseThrow(() -> raced));
